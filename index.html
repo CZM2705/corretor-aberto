@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corretor - Teste Limpo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 text-gray-800 font-[Inter] min-h-screen flex flex-col">
+
+    <!-- 1. TELA DE LOGIN -->
+    <div id="login-screen" class="flex-grow flex flex-col items-center justify-center p-4">
+        <div class="bg-white p-10 rounded-2xl shadow-lg max-w-md w-full text-center">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Corretor (Modo Teste)</h1>
+            <p class="text-gray-500 mb-8">Login liberado para qualquer conta Google.</p>
+            <button id="login-button" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-blue-700 transition">
+                Entrar com Google
+            </button>
+            <p id="login-status" class="mt-4 text-sm text-red-500 hidden"></p>
+        </div>
+    </div>
+
+    <!-- 2. APLICAÇÃO PRINCIPAL (SELEÇÃO + EDITOR JUNTOS PARA TESTE) -->
+    <div id="app-screen" class="hidden flex-grow container mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">Bem-vindo, <span id="user-name" class="text-blue-600"></span></h2>
+                <p class="text-sm text-gray-500">Modo de Diagnóstico de Chave API</p>
+            </div>
+            <button id="logout-button" class="text-red-600 font-medium hover:underline">Sair</button>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- COLUNA DA ESQUERDA: CONFIGURAÇÃO -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- 1. CHAVE API -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 class="font-bold text-lg mb-4 flex items-center gap-2"><i class="fa-solid fa-key"></i> Chave API</h3>
+                    <input type="password" id="api-key" class="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Cole sua chave aqui...">
+                    
+                    <!-- DEBUGGER VISUAL DA CHAVE -->
+                    <div id="key-debug" class="mt-3 p-3 bg-gray-100 rounded text-xs font-mono text-gray-600 hidden">
+                        <p>Status: <span id="key-status-text">Aguardando...</span></p>
+                        <p>Tamanho: <span id="key-length">0</span> caracteres</p>
+                        <p>Início: <span id="key-start">...</span></p>
+                    </div>
+                </div>
+
+                <!-- 2. SELEÇÃO DE SETOR -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <h3 class="font-bold text-lg mb-4">Selecione o Setor</h3>
+                    <select id="sector-select" class="w-full p-3 border border-gray-300 rounded-lg">
+                        <option value="integral1">Integral 1º Ano</option>
+                        <option value="integral2">Integral 2º Ano</option>
+                        <option value="robotica">Robótica</option>
+                        <option value="gastronomia">Gastronomia</option>
+                        <option value="cambridge_ey">Cambridge Early Years</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- COLUNA DA DIREITA: EDITOR -->
+            <div class="lg:col-span-2">
+                <div class="bg-white p-6 rounded-xl shadow-lg h-full">
+                    <label class="block font-bold text-gray-700 mb-2">Relatório do Aluno:</label>
+                    <textarea id="report-text" class="w-full h-48 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-4" placeholder="Cole o texto aqui..."></textarea>
+                    
+                    <button id="analyze-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-xl transition flex justify-center items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Analisar Texto
+                    </button>
+
+                    <!-- ÁREA DE RESPOSTA -->
+                    <div id="loading" class="hidden mt-6 text-center text-gray-500">
+                        <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><br>Consultando Google AI...
+                    </div>
+                    
+                    <div id="error-box" class="hidden mt-6 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-mono whitespace-pre-wrap"></div>
+                    
+                    <div id="result-box" class="mt-6 prose prose-blue max-w-none hidden"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCHlvNnopglq7Y8glXo8rUYU-Hn1lR7YTk",
+            authDomain: "corretor-com-login-fafbilingue.firebaseapp.com",
+            projectId: "corretor-com-login-fafbilingue",
+            storageBucket: "corretor-com-login-fafbilingue.firebasestorage.app",
+            messagingSenderId: "724149401323",
+            appId: "1:724149401323:web:fdf14d941e5cc84db2b0ae"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        // 1. Lógica de Login/Logout
+        const loginScreen = document.getElementById('login-screen');
+        const appScreen = document.getElementById('app-screen');
+        const loginBtn = document.getElementById('login-button');
+        const logoutBtn = document.getElementById('logout-button');
+        const statusText = document.getElementById('login-status');
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loginScreen.classList.add('hidden');
+                appScreen.classList.remove('hidden');
+                document.getElementById('user-name').textContent = user.displayName || user.email;
+            } else {
+                loginScreen.classList.remove('hidden');
+                appScreen.classList.add('hidden');
+            }
+        });
+
+        loginBtn.addEventListener('click', () => {
+            signInWithPopup(auth, provider).catch(err => {
+                statusText.textContent = err.message;
+                statusText.classList.remove('hidden');
+            });
+        });
+
+        logoutBtn.addEventListener('click', () => signOut(auth));
+
+        // 2. Lógica de Validação da Chave (IMPORTANTE)
+        const keyInput = document.getElementById('api-key');
+        const keyDebug = document.getElementById('key-debug');
+        
+        keyInput.addEventListener('input', (e) => {
+            const raw = e.target.value;
+            const clean = raw.trim();
+            const len = clean.length;
+            
+            keyDebug.classList.remove('hidden');
+            document.getElementById('key-length').textContent = len;
+            
+            // Verifica formato
+            if (len === 0) {
+                document.getElementById('key-status-text').innerHTML = "<span class='text-gray-500'>Vazio</span>";
+            } else if (!clean.startsWith('AIza')) {
+                document.getElementById('key-status-text').innerHTML = "<span class='text-red-600 font-bold'>INVÁLIDA (Não começa com AIza)</span>";
+            } else if (len < 39) {
+                document.getElementById('key-status-text').innerHTML = "<span class='text-orange-500'>MUITO CURTA (Falta caracteres)</span>";
+            } else {
+                document.getElementById('key-status-text').innerHTML = "<span class='text-green-600 font-bold'>FORMATO OK</span>";
+                document.getElementById('key-start').textContent = clean.substring(0, 5) + "...";
+            }
+        });
+
+        // 3. Prompts Simplificados para Teste
+        const prompts = {
+            integral1: "Analise este relatório de aluno de 1º ano (6 anos). Foque em desenvolvimento social e alfabetização. Texto:",
+            integral2: "Analise este relatório de aluno de 2º ano (7 anos). Foque em autonomia e organização. Texto:",
+            robotica: "Analise este relatório de Robótica. Foque em organização dos kits, trabalho em equipe e lógica. Texto:",
+            gastronomia: "Analise este relatório de Gastronomia. Foque em organização, sensorial e higiene. Texto:",
+            cambridge_ey: "Analise este relatório do Cambridge Early Years. Foque em desenvolvimento motor e social em inglês. Texto:"
+        };
+
+        // 4. Chamada API
+        document.getElementById('analyze-button').addEventListener('click', async () => {
+            const apiKey = keyInput.value.trim();
+            const text = document.getElementById('report-text').value.trim();
+            const sector = document.getElementById('sector-select').value;
+            const errorBox = document.getElementById('error-box');
+            const resultBox = document.getElementById('result-box');
+            const loading = document.getElementById('loading');
+
+            errorBox.classList.add('hidden');
+            resultBox.classList.add('hidden');
+            resultBox.innerHTML = '';
+
+            if (!apiKey || apiKey.length < 30) {
+                alert("Chave API inválida ou não inserida.");
+                return;
+            }
+            if (!text) {
+                alert("Insira o texto do relatório.");
+                return;
+            }
+
+            loading.classList.remove('hidden');
+
+            try {
+                // Modelo Estável
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+                
+                const prompt = `${prompts[sector]} \n\n ${text}`;
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    // MOSTRA O ERRO EXATO NA TELA
+                    throw new Error(JSON.stringify(data.error, null, 2));
+                }
+
+                if (data.candidates && data.candidates[0].content) {
+                    const md = data.candidates[0].content.parts[0].text;
+                    // Conversor simples Markdown -> HTML
+                    const html = md
+                        .replace(/^### (.*$)/gim, '<h3 class="text-xl font-bold mt-4 mb-2 text-blue-800">$1</h3>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br>');
+                    
+                    resultBox.innerHTML = html;
+                    resultBox.classList.remove('hidden');
+                } else {
+                    throw new Error("A IA respondeu, mas não trouxe texto. Resposta vazia.");
+                }
+
+            } catch (error) {
+                errorBox.textContent = "ERRO TÉCNICO DO GOOGLE:\n" + error.message;
+                errorBox.classList.remove('hidden');
+            } finally {
+                loading.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
